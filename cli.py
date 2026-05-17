@@ -10761,16 +10761,18 @@ class HermesCLI:
             recents = state.get("_recents") or []
             if stage == "provider":
                 # Providers + Recent button (at index 0 if exists) + Cancel
+                # Without recents: indices 0..N-1 = providers, N = Cancel
+                # With recents: index 0 = Recent, 1..N = providers, N+1 = Cancel
                 max_idx = len(state.get("providers") or [])
                 if recents:
                     max_idx += 1  # +1 for the Recent button at index 0
-                max_idx += 1  # +1 for Cancel button
+                # max_idx is now the Cancel position
             elif stage == "recents":
                 # Recents list + Back + Cancel
-                max_idx = len(recents) + 1  # +1 for Cancel
+                max_idx = len(recents) + 1  # +1 for Back (Cancel is last)
             else:
                 # model stage: models + Back + Cancel
-                max_idx = len(state.get("model_list") or []) + 1  # +1 for Cancel
+                max_idx = len(state.get("model_list") or []) + 1  # +1 for Back (Cancel is last)
             state["selected"] = min(max_idx, state.get("selected", 0) + 1)
             event.app.invalidate()
 
