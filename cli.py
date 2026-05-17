@@ -5751,9 +5751,9 @@ class HermesCLI:
         """Open prompt_toolkit-native /model picker modal."""
         self._capture_modal_input_snapshot()
         default_idx = next((i for i, p in enumerate(providers) if p.get("is_current")), 0)
-        # Shift default if we have recents entries (they come first)
+        # If recents exist, Recent button is at index 0, providers start at index 1
         if recents:
-            default_idx += len(recents) + 1  # +1 for the divider
+            default_idx += 1  # +1 to skip the Recent button
         self._model_picker_state = {
             "stage": "provider",
             "providers": providers,
@@ -5905,44 +5905,20 @@ class HermesCLI:
         if stage == "provider":
             providers = state.get("providers") or []
             recents = state.get("_recents") or []
-            recents_count = len(recents)
-            recents_section_height = 0
+            
+            # If recents exist, index 0 is the "Recent" button
             if recents:
-                recents_section_height = recents_count + 2  # header + entries + divider
-            # Determine what was actually selected
-            choice_offset = selected  # index into the virtual choices list
-            if recents and choice_offset < recents_section_height:
-                 # Selected a header, divider, or recent entry
-                if choice_offset == 0:
-                     # Header row — decorative only, do nothing
+                if selected == 0:
+                    # Enter recents submenu
+                    state["stage"] = "recents"
+                    state["selected"] = 0
+                    self._invalidate(min_interval=0.0)
                     return
-                if choice_offset == recents_section_height - 1:
-                     # Divider row — close picker
-                    self._close_model_picker()
-                    return
-                # It's a recents entry (index 1..recents_count)
-                r_idx = choice_offset - 1
-                if r_idx < len(recents):
-                    r = recents[r_idx]
-                    from hermes_cli.model_switch import switch_model
-                    result = switch_model(
-                        raw_input=r["model"],
-                        current_provider=self.provider or "",
-                        current_model=self.model or "",
-                        current_base_url=self.base_url or "",
-                        current_api_key=self.api_key or "",
-                        is_global=persist_global,
-                        explicit_provider=str(r.get("provider", "")),
-                        user_providers=state.get("user_provs"),
-                        custom_providers=state.get("custom_provs"),
-                    )
-                    self._close_model_picker()
-                    self._apply_model_switch_result(result, persist_global)
-                else:
-                    self._close_model_picker()
-                return
-            # Adjust selected for the providers portion
-            provider_idx = selected - recents_section_height
+                # Adjust provider index (skip the Recent button)
+                provider_idx = selected - 1
+            else:
+                provider_idx = selected
+                
             if provider_idx >= len(providers):
                 self._close_model_picker()
                 return
@@ -5973,10 +5949,12 @@ class HermesCLI:
             cancel_idx = len(model_list) + 1
             if selected == back_idx:
                 state["stage"] = "provider"
-                recents = state.get("_recents") or []
-                recents_offset = len(recents) + 2 if recents else 0
-                provider_idx = next((i for i, p in enumerate(state.get("providers") or []) if p.get("slug") == provider_data.get("slug")), 0)
-                state["selected"] = provider_idx + recents_offset
+                # If recents exist, Recent button is at index 0
+                if state.get("_recents"):
+                    state["selected"] = 0
+                else:
+                    provider_idx = next((i for i, p in enumerate(state.get("providers") or []) if p.get("slug") == provider_data.get("slug")), 0)
+                    state["selected"] = provider_idx
                 self._invalidate(min_interval=0.0)
                 return
             if selected >= cancel_idx:
@@ -5993,6 +5971,38 @@ class HermesCLI:
                     current_api_key=self.api_key or "",
                     is_global=persist_global,
                     explicit_provider=provider_data.get("slug"),
+                    user_providers=state.get("user_provs"),
+                    custom_providers=state.get("custom_provs"),
+                )
+                self._close_model_picker()
+                self._apply_model_switch_result(result, persist_global)
+                return
+            self._close_model_picker()
+            return
+        if stage == "recents":
+            _recents = state.get("_recents") or []
+            back_idx = len(_recents)
+            cancel_idx = len(_recents) + 1
+            if selected == back_idx:
+                # Back to provider list
+                state["stage"] = "provider"
+                state["selected"] = 0  # Recent button at index 0
+                self._invalidate(min_interval=0.0)
+                return
+            if selected >= cancel_idx:
+                self._close_model_picker()
+                return
+            if selected < len(_recents):
+                r = _recents[selected]
+                from hermes_cli.model_switch import switch_model
+                result = switch_model(
+                    raw_input=r["model"],
+                    current_provider=self.provider or "",
+                    current_model=self.model or "",
+                    current_base_url=self.base_url or "",
+                    current_api_key=self.api_key or "",
+                    is_global=persist_global,
+                    explicit_provider=str(r.get("provider", "")),
                     user_providers=state.get("user_provs"),
                     custom_providers=state.get("custom_provs"),
                 )
@@ -11763,13 +11773,9 @@ class HermesCLI:
                 _providers = state.get("_providers") if "_providers" in state else state.get("providers")
                 _recents = state.get("_recents") or []
 
-                # Recent models section (injected before providers)
+                # Recent models section — single "Recent" button (not expanded)
                 if _recents:
-                    choices.append("── RECENT ──────────────")
-                    for r in _recents:
-                        label = f"  {r['model']}  (via {r.get('provider', '?')})"
-                        choices.append(label)
-                    choices.append("── PROVIDERS ───────────")
+                    choices.append(f"🕒 Recent Models ({len(_recents)})")
 
                 for p in _providers if isinstance(_providers, list) else []:
                     count = p.get("total_models", len(p.get("models", [])))
@@ -11779,6 +11785,15 @@ class HermesCLI:
                     choices.append(label)
                 choices.append("Cancel")
                 hint = f"Current: {state.get('current_model', 'unknown')} on {state.get('current_provider', 'unknown')}"
+            elif stage == "recents":
+                _recents = state.get("_recents") or []
+                title = "⚙ Model Picker — Recent Models"
+                choices = []
+                for r in _recents:
+                    label = f"{r['model']}  (via {r.get('provider', '?')})" if r.get('provider') else r['model']
+                    choices.append(label)
+                choices += ["← Back", "Cancel"]
+                hint = f"Select a recent model ({len(_recents)} available)" if _recents else "No recent models available."
             else:
                 provider_data = state.get("provider_data") or {}
                 model_list = state.get("model_list") or []
