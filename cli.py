@@ -11801,7 +11801,7 @@ class HermesCLI:
 
                 # Recent models section — single "Recent" button (not expanded)
                 if _recents:
-                    choices.append(f"Recent Models ({len(_recents)})")
+                    choices.append(f"Recents ({len(_recents)} models)")
 
                 for p in _providers if isinstance(_providers, list) else []:
                     count = p.get("total_models", len(p.get("models", [])))
