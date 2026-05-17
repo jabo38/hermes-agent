@@ -5912,9 +5912,13 @@ class HermesCLI:
             # Determine what was actually selected
             choice_offset = selected  # index into the virtual choices list
             if recents and choice_offset < recents_section_height:
-                # Selected a header, divider, or recent entry
-                if choice_offset == 0 or choice_offset == recents_section_height - 1:
-                    self._close_model_picker()  # divider or header — close
+                 # Selected a header, divider, or recent entry
+                if choice_offset == 0:
+                     # Header row — decorative only, do nothing
+                    return
+                if choice_offset == recents_section_height - 1:
+                     # Divider row — close picker
+                    self._close_model_picker()
                     return
                 # It's a recents entry (index 1..recents_count)
                 r_idx = choice_offset - 1

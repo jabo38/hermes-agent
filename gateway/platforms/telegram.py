@@ -1929,8 +1929,14 @@ class TelegramAdapter(BasePlatformAdapter):
             self._model_picker_state.pop(chat_id, None)
 
         elif data == "mb":
-            # --- Back to provider list ---
+             # --- Back to provider list ---
             buttons = []
+
+             # Re-add recents button if we have them and they weren't just the back source
+            _recents = state.get("_recents", [])
+            if _recents:
+                buttons.insert(0, InlineKeyboardButton(f"🕒 Recents ({len(_recents)})", callback_data="mp:__recents__"))
+
             for p in state["providers"]:
                 count = p.get("total_models", len(p.get("models", [])))
                 label = f"{p['name']} ({count})"
@@ -1938,16 +1944,20 @@ class TelegramAdapter(BasePlatformAdapter):
                     label = f"✓ {label}"
                 buttons.append(
                     InlineKeyboardButton(label, callback_data=f"mp:{p['slug']}")
-                )
+                 )
 
             rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
             rows.append([InlineKeyboardButton("✗ Cancel", callback_data="mx")])
             keyboard = InlineKeyboardMarkup(rows)
 
-            try:
-                provider_label = get_label(state["current_provider"])
-            except Exception:
-                provider_label = state["current_provider"]
+             # If coming from recents mode, show a brief indicator so user knows they're out
+            if state.get("selected_provider") == "__recents__":
+                provider_label = f"Recents → {get_label(state['current_provider'])}"
+            else:
+                try:
+                    provider_label = get_label(state["current_provider"])
+                except Exception:
+                    provider_label = state["current_provider"]
 
             await query.edit_message_text(
                 text=(
@@ -1955,10 +1965,10 @@ class TelegramAdapter(BasePlatformAdapter):
                     f"Current model: `{state['current_model'] or 'unknown'}`\n"
                     f"Provider: {provider_label}\n\n"
                     f"Select a provider:"
-                ),
+                 ),
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=keyboard,
-            )
+             )
             await query.answer()
 
         elif data == "mx":
