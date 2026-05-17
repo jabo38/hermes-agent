@@ -5906,18 +5906,31 @@ class HermesCLI:
             providers = state.get("providers") or []
             recents = state.get("_recents") or []
             
-            # If recents exist, index 0 is the "Recent" button
             if recents:
+                # Index 0 = Recent, 1..N = providers, N+1 = Back, N+2 = Cancel
                 if selected == 0:
                     # Enter recents submenu
                     state["stage"] = "recents"
                     state["selected"] = 0
                     self._invalidate(min_interval=0.0)
                     return
-                # Adjust provider index (skip the Recent button)
                 provider_idx = selected - 1
+                back_idx = len(providers) + 1
+                cancel_idx = len(providers) + 2
             else:
+                # 0..N-1 = providers, N = Back, N+1 = Cancel
                 provider_idx = selected
+                back_idx = len(providers)
+                cancel_idx = len(providers) + 1
+            
+            # Handle Back → close picker (or could go to previous context)
+            if selected == back_idx:
+                self._close_model_picker()
+                return
+            # Handle Cancel
+            if selected >= cancel_idx:
+                self._close_model_picker()
+                return
                 
             if provider_idx >= len(providers):
                 self._close_model_picker()
@@ -10760,13 +10773,14 @@ class HermesCLI:
             stage = state.get("stage")
             recents = state.get("_recents") or []
             if stage == "provider":
-                # Providers + Recent button (at index 0 if exists) + Cancel
-                # Without recents: indices 0..N-1 = providers, N = Cancel
-                # With recents: index 0 = Recent, 1..N = providers, N+1 = Cancel
-                max_idx = len(state.get("providers") or [])
+                # Providers + Recent button (at index 0 if exists) + Back + Cancel
+                # Without recents: indices 0..N-1 = providers, N = Back, N+1 = Cancel (max)
+                # With recents: index 0 = Recent, 1..N = providers, N+1 = Back, N+2 = Cancel (max)
+                num_providers = len(state.get("providers") or [])
+                max_idx = num_providers + 1  # +1 for Back
                 if recents:
-                    max_idx += 1  # +1 for the Recent button at index 0
-                # max_idx is now the Cancel position
+                    max_idx += 1  # +1 for the Recent button
+                max_idx += 1  # +1 for Cancel (last position)
             elif stage == "recents":
                 # Recents list + Back + Cancel
                 max_idx = len(recents) + 1  # +1 for Back (Cancel is last)
@@ -11795,7 +11809,7 @@ class HermesCLI:
                     if p.get("is_current"):
                         label += "  ← current"
                     choices.append(label)
-                choices.append("Cancel")
+                choices += ["← Back", "Cancel"]
                 hint = f"Current: {state.get('current_model', 'unknown')} on {state.get('current_provider', 'unknown')}"
             elif stage == "recents":
                 _recents = state.get("_recents") or []
