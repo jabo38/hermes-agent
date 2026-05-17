@@ -10757,10 +10757,20 @@ class HermesCLI:
             state = self._model_picker_state
             if not state:
                 return
-            if state.get("stage") == "provider":
+            stage = state.get("stage")
+            recents = state.get("_recents") or []
+            if stage == "provider":
+                # Providers + Recent button (at index 0 if exists) + Cancel
                 max_idx = len(state.get("providers") or [])
+                if recents:
+                    max_idx += 1  # +1 for the Recent button at index 0
+                max_idx += 1  # +1 for Cancel button
+            elif stage == "recents":
+                # Recents list + Back + Cancel
+                max_idx = len(recents) + 1  # +1 for Cancel
             else:
-                max_idx = len(state.get("model_list") or []) + 1
+                # model stage: models + Back + Cancel
+                max_idx = len(state.get("model_list") or []) + 1  # +1 for Cancel
             state["selected"] = min(max_idx, state.get("selected", 0) + 1)
             event.app.invalidate()
 
