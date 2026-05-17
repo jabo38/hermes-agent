@@ -5747,7 +5747,7 @@ class HermesCLI:
             _ask()
         return result[0]
 
-    def _open_model_picker(self, providers: list, current_model: str, current_provider: str, user_provs=None, custom_provs=None, recents: list = None) -> None:
+    def _open_model_picker(self, providers: list, current_model: str, current_provider: str, user_provs=None, custom_provs=None, recents: list = None, current_provider_slug: str = "") -> None:
         """Open prompt_toolkit-native /model picker modal."""
         self._capture_modal_input_snapshot()
         default_idx = next((i for i, p in enumerate(providers) if p.get("is_current")), 0)
@@ -5760,6 +5760,7 @@ class HermesCLI:
             "selected": default_idx,
             "current_model": current_model,
             "current_provider": current_provider,
+            "current_provider_slug": current_provider_slug,
             "user_provs": user_provs,
             "custom_provs": custom_provs,
             "_recents": recents or [],
@@ -6033,6 +6034,7 @@ class HermesCLI:
           /model <name> --global              — switch and persist to config.yaml
           /model <name> --provider <provider> — switch provider + model
           /model --provider <provider>        — switch to provider, auto-detect model
+          /model --clear-recents              — clear the recently-used models history
         """
         from hermes_cli.model_switch import switch_model, parse_model_flags, list_authenticated_providers
         from hermes_cli.providers import get_label
@@ -6040,6 +6042,17 @@ class HermesCLI:
         # Parse args from the original command
         parts = cmd_original.split(None, 1)  # split off '/model'
         raw_args = parts[1].strip() if len(parts) > 1 else ""
+
+        # Handle --clear-recents before regular flag parsing
+        if "--clear-recents" in raw_args.split():
+            try:
+                from hermes_cli.model_recents import clear_recent_models, load_recent_models
+                before_count = len(load_recent_models(limit=999))
+                clear_recent_models()
+                _cprint(f"  ✓ Cleared {before_count} recent model entries.")
+            except Exception as exc:
+                _cprint(f"  ✗ Failed to clear recents: {exc}")
+            return
 
         # Parse --provider and --global flags
         model_input, explicit_provider, persist_global = parse_model_flags(raw_args)
@@ -6086,6 +6099,7 @@ class HermesCLI:
                 user_provs=user_provs,
                 custom_provs=custom_provs,
                 recents=self._load_picker_recents(),
+                current_provider_slug=self.provider or "",
             )
             return
 
@@ -11813,10 +11827,15 @@ class HermesCLI:
                 hint = f"Current: {state.get('current_model', 'unknown')} on {state.get('current_provider', 'unknown')}"
             elif stage == "recents":
                 _recents = state.get("_recents") or []
+                current_model = state.get("current_model", "")
+                current_provider_slug = state.get("current_provider_slug", "")
                 title = "⚙ Model Picker — Recent Models"
                 choices = []
                 for r in _recents:
                     label = f"{r['model']}  (via {r.get('provider', '?')})" if r.get('provider') else r['model']
+                    # Mark currently-active model (match by slug, not label)
+                    if r['model'] == current_model and r.get('provider', '') == current_provider_slug:
+                        label += "  ← current"
                     choices.append(label)
                 choices += ["← Back", "Cancel"]
                 hint = f"Select a recent model ({len(_recents)} available)" if _recents else "No recent models available."

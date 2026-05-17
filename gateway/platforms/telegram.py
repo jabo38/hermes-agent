@@ -1772,25 +1772,39 @@ class TelegramAdapter(BasePlatformAdapter):
                     await query.answer(text="No recent models.")
                     return
                 
-                # Build a flat list of recent models for display
-                import urllib.parse as _urlparse
+                current_model = state.get("current_model", "")
+                current_provider_slug = state.get("current_provider", "")
                 
                 recent_models: list = []
                 for entry in _recents[:8]:  # Max 8 recents
                     model_name = entry["model"]
                     provider = entry.get("provider", "unknown")
-                    # Store provider alongside model for resolution
                     recent_models.append((model_name, provider))
                 
                 # Store in state for mm: handler to use
                 state["selected_provider"] = "__recents__"
                 state["selected_provider_name"] = "Recents"
                 state["model_list"] = [m[0] for m in recent_models]
-                state["model_providers"] = [m[1] for m in recent_models]  # Parallel list
+                state["model_providers"] = [m[1] for m in recent_models]
                 state["model_page"] = 0
                 
-                # Build keyboard using same pattern as normal model list
-                keyboard, page_info = self._build_model_keyboard(state["model_list"], 0)
+                # Build keyboard directly so the ★ marker survives short-name truncation
+                buttons: list = []
+                for i, (model_name, provider) in enumerate(recent_models):
+                    short = model_name.split("/")[-1] if "/" in model_name else model_name
+                    if len(short) > 38:
+                        short = short[:35] + "..."
+                    # Mark currently-active model
+                    if model_name == current_model and provider == current_provider_slug:
+                        short = f"★ {short}"
+                    buttons.append(InlineKeyboardButton(short, callback_data=f"mm:{i}"))
+                rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+                rows.append([
+                    InlineKeyboardButton("◀ Back", callback_data="mb"),
+                    InlineKeyboardButton("✗ Cancel", callback_data="mx"),
+                ])
+                keyboard = InlineKeyboardMarkup(rows)
+                page_info = ""
                 
                 await query.edit_message_text(
                     text=(
